@@ -88,8 +88,8 @@ if (m.isGroup) {
 groupMetadata = await client.groupMetadata(m.chat).catch(() => null)
 groupName = groupMetadata?.subject || ''
 const admins = groupMetadata?.participants.filter(p => (p.admin === 'admin' || p.admin === 'superadmin')) || []
-const realSender = await resolveLidToPnJid(client, m.chat, sender)
-const realBot = await resolveLidToPnJid(client, m.chat, botJid)
+const realSender = await resolveLidToRealJid(client, m.chat, sender)
+const realBot = await resolveLidToRealJid(client, m.chat, botJid)
 isAdmins = admins.some(p => decodeJid(p.id) === realSender || decodeJid(p.lid) === realSender)
 isBotAdmins = admins.some(p => decodeJid(p.id) === realBot || decodeJid(p.lid) === realBot)
 }
