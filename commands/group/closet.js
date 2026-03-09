@@ -1,4 +1,4 @@
-import { pickTargetJid, decodeJid } from '../lib/utils.js'
+import { pickTargetJid, decodeJid } from '../../lib/utils.js'
 
 export default {
   command: ['closet', 'close', 'cerrar'],
