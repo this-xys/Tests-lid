@@ -9,7 +9,7 @@ import initDB from './lib/system/initDB.js';
 import antilink from './commands/antilink.js';
 import level from './commands/level.js';
 import { getGroupAdmins } from './lib/message.js';
-import { decodeJid, resolveLidToPnJid } from './lib/utils.js';
+import { decodeJid, resolveLidToRealJid } from './lib/utils.js';
 
 seeCommands()
 
