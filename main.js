@@ -9,12 +9,13 @@ import initDB from './lib/system/initDB.js';
 import antilink from './commands/antilink.js';
 import level from './commands/level.js';
 import { getGroupAdmins } from './lib/message.js';
+import { decodeJid, resolveLidToPnJid } from './lib/utils.js';
 
 seeCommands()
 
 export default async (client, m) => {
 if (!m.message) return
-const sender = m.sender 
+const sender = decodeJid(m.sender)
 let body = m.message.conversation || m.message.extendedTextMessage?.text || m.message.imageMessage?.caption || m.message.videoMessage?.caption || m.message.buttonsResponseMessage?.selectedButtonId || m.message.listResponseMessage?.singleSelectReply?.selectedRowId || m.message.templateButtonReplyMessage?.selectedId || ''
 
 initDB(m, client)
@@ -29,12 +30,12 @@ await plugin.all.call(client, m, { client })
 console.error(`Error en plugin.all -> ${name}`, err)
 }}}
   
-const from = m.key.remoteJid
-const botJid = client.user.id.split(':')[0] + '@s.whatsapp.net' || client.user.lid
+const from = decodeJid(m.key.remoteJid)
+const botJid = decodeJid(client.user.id)
 const chat = global.db.data.chats[m.chat] || {}
 const settings = global.db.data.settings[botJid] || {}  
 const user = global.db.data.users[sender] ||= {}
-const users = chat.users[sender] || {}
+const users = chat.users?.[sender] || {}
 const rawBotname = settings.namebot || 'Yuki'
 const tipo = settings.type || 'Sub'
 const isValidBotname = /^[\w\s]+$/.test(rawBotname)
@@ -80,17 +81,22 @@ const pushname = m.pushName || 'Sin nombre'
 let groupMetadata = null
 let groupAdmins = []
 let groupName = ''
+let isBotAdmins = false
+let isAdmins = false
+
 if (m.isGroup) {
 groupMetadata = await client.groupMetadata(m.chat).catch(() => null)
 groupName = groupMetadata?.subject || ''
-groupAdmins = groupMetadata?.participants.filter(p => (p.admin === 'admin' || p.admin === 'superadmin')) || []
+const admins = groupMetadata?.participants.filter(p => (p.admin === 'admin' || p.admin === 'superadmin')) || []
+const realSender = await resolveLidToPnJid(client, m.chat, sender)
+const realBot = await resolveLidToPnJid(client, m.chat, botJid)
+isAdmins = admins.some(p => decodeJid(p.id) === realSender || decodeJid(p.lid) === realSender)
+isBotAdmins = admins.some(p => decodeJid(p.id) === realBot || decodeJid(p.lid) === realBot)
 }
-const isBotAdmins = m.isGroup ? groupAdmins.some(p => p.phoneNumber === botJid || p.jid === botJid || p.id === botJid || p.lid === botJid ) : false
-const isAdmins = m.isGroup ? groupAdmins.some(p => p.phoneNumber === sender || p.jid === sender || p.id === sender || p.lid === sender ) : false
 
 const chatData = global.db.data.chats[from]
-const consolePrimary = chatData.primaryBot
-if (!consolePrimary || consolePrimary === client.user.id.split(':')[0] + '@s.whatsapp.net') {
+const consolePrimary = chatData?.primaryBot
+if (!consolePrimary || consolePrimary === botJid) {
 const h = chalk.bold.blue('╭────────────────────────────···')
 const t = chalk.bold.blue('╰────────────────────────────···')
 const v = chalk.bold.blue('│')
@@ -112,7 +118,7 @@ bots.push(sub + '@s.whatsapp.net')
 try {
 const ownerCreds = path.resolve('./Sessions/Owner/creds.json')
 if (fs.existsSync(ownerCreds)) {
-const ownerId = global.client.user.id.split(':')[0] + '@s.whatsapp.net'
+const ownerId = decodeJid(client.user.id)
 bots.push(ownerId)
 }} catch {}
 return bots
@@ -121,7 +127,7 @@ const botprimaryId = chat?.primaryBot
 if (botprimaryId && botprimaryId !== botJid) {
 if (hasPrefix) {
 const participants = m.isGroup ? (await client.groupMetadata(m.chat).catch(() => ({ participants: [] }))).participants : []
-const primaryInGroup = participants.some(p => (p.phoneNumber || p.id) === botprimaryId)
+const primaryInGroup = participants.some(p => decodeJid(p.id) === botprimaryId)
 const isPrimarySelf = botprimaryId === botJid
 const primaryInSessions = getAllSessionBots().includes(botprimaryId)
 if (!primaryInSessions || !primaryInGroup) {
@@ -138,16 +144,16 @@ if (m.chat && !m.chat.endsWith('g.us')) {
 const allowedInPrivateForUsers = ['report', 'reporte', 'sug', 'suggest', 'invite', 'invitar', 'setname', 'setbotname', 'setbanner', 'setmenubanner', 'setusername', 'setpfp', 'setimage', 'setbotcurrency', 'setbotprefix', 'setstatus', 'setbotowner', 'reload', 'code', 'qr']
 if (!isOwners && !allowedInPrivateForUsers.includes(command)) return
 }
-if (chat?.isBanned && !(command === 'bot' && text === 'on') && !global.owner.map(num => num + '@s.whatsapp.net').includes(sender)) {
+if (chat?.isBanned && !(command === 'bot' && text === 'on') && !isOwners) {
 await m.reply(`ꕥ El bot *${settings.botname}* está desactivado en este grupo.\n\n> ✎ Un *administrador* puede activarlo con el comando:\n> » *${usedPrefix}bot on*`)
 return
 }
 
 const today = new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit' }).split('/').reverse().join('-')
-const userrs = chatData.users[sender] || {}
-if (!userrs.stats) userrs.stats = {}
-if (!userrs.stats[today]) userrs.stats[today] = { msgs: 0, cmds: 0 }
-userrs.stats[today].msgs++
+const userrs = chatData?.users?.[sender] || {}
+if (userrs && !userrs.stats) userrs.stats = {}
+if (userrs?.stats && !userrs.stats[today]) userrs.stats[today] = { msgs: 0, cmds: 0 }
+if (userrs?.stats?.[today]) userrs.stats[today].msgs++
 
 if (chat.adminonly && !isAdmins) return
 if (!command) return
@@ -157,22 +163,23 @@ if (settings.prefix === true) return
 await client.readMessages([m.key])
 return m.reply(`ꕤ El comando *${command}* no existe.\n✎ Usa *${usedPrefix}help* para ver la lista de comandos disponibles.`)
 }
-const comando = m.text.slice(usedPrefix.length);
-if (cmdData.isOwner && !global.owner.map(num => num + '@s.whatsapp.net').includes(sender)) {
+if (cmdData.isOwner && !isOwners) {
 if (settings.prefix === true) return
 return m.reply(`ꕤ El comando *${command}* no existe.\n✎ Usa *${usedPrefix}help* para ver la lista de comandos disponibles.`)
 }
-if (cmdData.isAdmin && !isAdmins) return client.reply(m.chat, mess.admin, m)
-if (cmdData.botAdmin && !isBotAdmins) return client.reply(m.chat, mess.botAdmin, m)
+if (cmdData.isAdmin && !isAdmins) return client.reply(m.chat, global.mess.admin, m)
+if (cmdData.botAdmin && !isBotAdmins) return client.reply(m.chat, global.mess.botAdmin, m)
 try {
 await client.readMessages([m.key])
 user.usedcommands = (user.usedcommands || 0) + 1
 settings.commandsejecut = (settings.commandsejecut || 0) + 1
+if (users) {
 users.usedTime = new Date()
 users.lastCmd = Date.now()
+if (users.stats?.[today]) users.stats[today].cmds++
+}
 user.exp = (user.exp || 0) + Math.floor(Math.random() * 100)
 user.name = m.pushName
-users.stats[today].cmds++
 await cmdData.run(client, m, args, usedPrefix, command, text)
 } catch (error) {
 await client.sendMessage(m.chat, { text: `《✧》 Error al ejecutar el comando\n${error}` }, { quoted: m })
