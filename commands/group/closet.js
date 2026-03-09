@@ -1,5 +1,3 @@
-import { pickTargetJid, decodeJid } from '../../lib/utils.js'
-
 export default {
   command: ['closet', 'close', 'cerrar'],
   category: 'grupo',
