@@ -1,21 +1,30 @@
+import { pickTargetJid, decodeJid } from '../lib/utils.js'
+
 export default {
   command: ['closet', 'close', 'cerrar'],
   category: 'grupo',
   isAdmin: true,
   botAdmin: true,
-  run: async (client, m, args, usedPrefix, command) => {
+  run: async (client, m, { args, usedPrefix, command }) => {
     try {
-      const chatJid = (typeof decodeJid === 'function') ? decodeJid(m.chat) : m.chat
-      const timeout = args[0] ? msParser(args[0]) : 0
+      const chatJid = decodeJid(m.chat)
+      const senderJid = await pickTargetJid(m, client)
+      const groupMetadata = await client.groupMetadata(chatJid)
+      const participants = groupMetadata.participants
+      
+      const user = participants.find(p => decodeJid(p.id) === senderJid)
+      const isUserAdmin = user?.admin || user?.isSuperAdmin || false
 
+      if (!isUserAdmin) {
+        return client.reply(chatJid, `《✧》 Esta función es solo para administradores.`, m)
+      }
+
+      const timeout = args[0] ? msParser(args[0]) : 0
       if (args[0] && !timeout) {
         return client.reply(chatJid, 'Formato inválido. Usa por ejemplo: 10s, 5m, 2h, 1d', m)
       }
 
-      const groupMetadata = await client.groupMetadata(chatJid)
-      const groupAnnouncement = groupMetadata.announce
-
-      if (groupAnnouncement === true) {
+      if (groupMetadata.announce === true) {
         return client.reply(chatJid, `《✧》 El grupo ya está cerrado.`, m)
       }
 
@@ -26,21 +35,18 @@ export default {
 
       if (timeout > 0) {
         await client.reply(chatJid, `❀ El grupo se cerrará en ${clockString(timeout)}.`, m)
-        
         setTimeout(async () => {
           try {
             const md = await client.groupMetadata(chatJid)
             if (md.announce === true) return
             await client.groupSettingUpdate(chatJid, 'announcement')
-          } catch (e) {
-            console.error('Error en cierre programado:', e)
-          }
+          } catch {}
         }, timeout)
       } else {
         await applyAction()
       }
     } catch (e) {
-      return m.reply(`> An unexpected error occurred while executing command *${usedPrefix + command}*.\n> [Error: *${e.message}*]`)
+      return m.reply(`> Error: *${e.message}*`)
     }
   },
 }
